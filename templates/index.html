@@ -230,7 +230,7 @@
     </p>
   </main>
 
-  <script>
+    <script>
     // ---------------------------------------------------------------------------
     // State
     // ---------------------------------------------------------------------------
@@ -238,7 +238,7 @@
     let selectedStart = null;
     let selectedDuration = null;
     let availableSlots = [];
-    let pricePerHourCents = 4000;   // default, overwritten by /api/hours
+    let pricePerHourCents = 4000;
     let stripeEnabled = false;
 
     // ---------------------------------------------------------------------------
@@ -253,12 +253,10 @@
       if (h12 === 0) h12 = 12;
       return `${h12}:${mi.toString().padStart(2,'0')} ${period}`;
     }
-
     function formatDateNice(iso) {
       const d = new Date(iso + 'T12:00:00');
       return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     }
-
     function durationLabel(mins) {
       if (mins === 60) return '1 hour';
       if (mins === 90) return '1.5 hours';
@@ -267,11 +265,9 @@
       if (mins === 180) return '3 hours';
       return mins + ' min';
     }
-
     function calcPriceCents(mins) {
       return Math.round(pricePerHourCents * (mins / 60));
     }
-
     function formatMoney(cents) {
       return '$' + (cents / 100).toFixed(2);
     }
@@ -279,61 +275,24 @@
     // ---------------------------------------------------------------------------
     // Init
     // ---------------------------------------------------------------------------
- async function onDateChange(e) {
-  selectedDate = e.target.value;
-  selectedStart = null;
-  selectedDuration = null;
-  document.getElementById('duration-section').classList.add('hidden');
-  document.getElementById('btn-to-details').disabled = true;
+    async function init() {
+      // show canceled banner if redirected back
+      if (new URLSearchParams(window.location.search).get('canceled') === '1') {
+        document.getElementById('canceled-banner').classList.remove('hidden');
+        window.history.replaceState({}, '', '/');
+      }
 
-  if (!selectedDate) {
-    document.getElementById('slots-container').classList.add('hidden');
-    return;
-  }
-
-  const d = new Date(selectedDate + 'T12:00:00');
-  const wd = d.getDay();
-  const isLate = (wd === 4 || wd === 5 || wd === 6);
-  document.getElementById('hours-hint').textContent =
-    isLate ? 'Open 4:00 PM – 2:00 AM · $40/hr' : 'Open 4:00 PM – 12:00 AM · $40/hr';
-
-  document.getElementById('slots-grid').innerHTML = '<p class="col-span-full text-center text-gray-500 text-sm py-6">Loading available times…</p>';
-  document.getElementById('slots-container').classList.remove('hidden');
-  document.getElementById('no-slots').classList.add('hidden');
-
-  try {
-    const res = await fetch(`/api/availability?date=${selectedDate}`);
-    const data = await res.json();
-
-    console.log("Availability response for", selectedDate, ":", data); // ← Helpful debug
-
-    if (data.error) {
-      console.error("Server error:", data.error);
-      document.getElementById('slots-grid').innerHTML = '';
-      document.getElementById('no-slots').textContent = 
-        data.error.includes("range") || data.error.includes("out") 
-          ? "No available slots today (past cutoff time?) — try a later start time or tomorrow." 
-          : data.error;
-      document.getElementById('no-slots').classList.remove('hidden');
-      document.getElementById('slot-count').textContent = '';
-      return;
-    }
-
-    availableSlots = data.slots || [];
-    if (data.price_per_hour_cents) pricePerHourCents = data.price_per_hour_cents;
-    renderSlots();
-  } catch (err) {
-    console.error(err);
-    document.getElementById('slots-grid').innerHTML = '<p class="col-span-full text-red-400 text-sm text-center">Could not load times. Please try again.</p>';
-  }
-}
-
-// Force today selected
-dateInput.value = todayStr;
-
-// Trigger availability
-const event = new Event('change');
-dateInput.dispatchEvent(event);
+      // SUPER AGGRESSIVE TEMP FIX — forces today
+      const now = new Date();
+      const todayStr = now.getFullYear() + '-' +
+                       String(now.getMonth() + 1).padStart(2, '0') + '-' +
+                       String(now.getDate()).padStart(2, '0');
+      const max = new Date();
+      max.setDate(max.getDate() + 60);
+      const dateInput = document.getElementById('date-picker');
+      dateInput.min = todayStr;
+      dateInput.max = max.toISOString().slice(0, 10);
+      dateInput.value = todayStr;
 
       const partySel = document.getElementById('party_size');
       for (let i = 1; i <= 12; i++) {
@@ -354,13 +313,18 @@ dateInput.dispatchEvent(event);
       }
 
       dateInput.addEventListener('change', onDateChange);
+      
+      // Trigger availability for today
+      const event = new Event('change');
+      dateInput.dispatchEvent(event);
+
       document.getElementById('btn-to-details').addEventListener('click', goToStep2);
       document.getElementById('btn-back').addEventListener('click', () => showStep(1));
       document.getElementById('booking-form').addEventListener('submit', onSubmit);
     }
 
     // ---------------------------------------------------------------------------
-    // Date → slots
+    // Date → slots  (UPDATED)
     // ---------------------------------------------------------------------------
     async function onDateChange(e) {
       selectedDate = e.target.value;
@@ -387,17 +351,25 @@ dateInput.dispatchEvent(event);
       try {
         const res = await fetch(`/api/availability?date=${selectedDate}`);
         const data = await res.json();
+        console.log("Availability response for", selectedDate, ":", data);
+
         if (data.error) {
+          console.error("Server error:", data.error);
           document.getElementById('slots-grid').innerHTML = '';
-          document.getElementById('no-slots').textContent = data.error;
+          document.getElementById('no-slots').textContent = 
+            data.error.includes("range") || data.error.includes("out") 
+              ? "No available slots today (past cutoff time?) — try a later start time or tomorrow."
+              : data.error;
           document.getElementById('no-slots').classList.remove('hidden');
           document.getElementById('slot-count').textContent = '';
           return;
         }
+
         availableSlots = data.slots || [];
         if (data.price_per_hour_cents) pricePerHourCents = data.price_per_hour_cents;
         renderSlots();
       } catch (err) {
+        console.error(err);
         document.getElementById('slots-grid').innerHTML = '<p class="col-span-full text-red-400 text-sm text-center">Could not load times. Please try again.</p>';
       }
     }
@@ -412,7 +384,6 @@ dateInput.dispatchEvent(event);
       }
       document.getElementById('no-slots').classList.add('hidden');
       document.getElementById('slot-count').textContent = `${availableSlots.length} open starts`;
-
       availableSlots.forEach(slot => {
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -430,7 +401,6 @@ dateInput.dispatchEvent(event);
       document.querySelectorAll('.slot-btn').forEach(b => {
         b.classList.toggle('selected', parseInt(b.dataset.start) === selectedStart);
       });
-
       const durSec = document.getElementById('duration-section');
       const opts = document.getElementById('duration-options');
       opts.innerHTML = '';
@@ -458,7 +428,6 @@ dateInput.dispatchEvent(event);
       });
       btnEl.classList.add('bg-garden-600', 'border-garden-400', 'text-white');
       btnEl.classList.remove('border-garden-700', 'text-gray-200');
-
       const endM = selectedStart + dur;
       document.getElementById('end-time-preview').textContent = minutesToDisplay(endM);
       document.getElementById('price-preview').textContent = formatMoney(calcPriceCents(dur));
@@ -471,7 +440,6 @@ dateInput.dispatchEvent(event);
     function showStep(n) {
       document.getElementById('step-1').classList.toggle('hidden', n !== 1);
       document.getElementById('step-2').classList.toggle('hidden', n !== 2);
-
       const tabs = [document.getElementById('step-1-tab'), document.getElementById('step-2-tab')];
       tabs.forEach((t, i) => {
         const active = (i + 1) === n;
@@ -497,7 +465,7 @@ dateInput.dispatchEvent(event);
     }
 
     // ---------------------------------------------------------------------------
-    // Submit → Stripe Checkout
+    // Submit
     // ---------------------------------------------------------------------------
     async function onSubmit(e) {
       e.preventDefault();
@@ -519,23 +487,18 @@ dateInput.dispatchEvent(event);
       };
 
       try {
-        // Prefer Stripe flow
         const res = await fetch('/api/create-checkout-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
         const data = await res.json();
-
         if (!res.ok) {
-          // If Stripe not configured, fall back to direct book (dev mode)
           if (res.status === 503 || (data.error && data.error.includes('not configured'))) {
             return await fallbackDirectBook(payload, btn, errEl);
           }
           throw new Error(data.error || 'Could not start payment');
         }
-
-        // Redirect to Stripe Checkout
         window.location.href = data.checkout_url;
       } catch (err) {
         errEl.textContent = err.message;
@@ -545,7 +508,6 @@ dateInput.dispatchEvent(event);
       }
     }
 
-    // Dev-mode fallback when Stripe keys are not set
     async function fallbackDirectBook(payload, btn, errEl) {
       try {
         const res = await fetch('/api/book', {
@@ -555,8 +517,7 @@ dateInput.dispatchEvent(event);
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Booking failed');
-        // Simple success redirect
-        alert('Booked (dev mode – no real payment)!\n\nConfirmation #' + data.booking_id + '\n' + data.summary.amount);
+        alert('Booked (dev mode – no real payment)!\n\nConfirmation #' + data.booking_id);
         window.location.href = '/';
       } catch (err) {
         errEl.textContent = err.message;
