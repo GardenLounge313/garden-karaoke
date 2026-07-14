@@ -287,24 +287,25 @@
         window.history.replaceState({}, '', '/');
       }
 
-  // FIXED CODE — allows today properly
+// SUPER AGGRESSIVE TEMP FIX — forces today
 const now = new Date();
-const todayStr = now.toISOString().slice(0, 10);   // YYYY-MM-DD of today
+const todayStr = now.getFullYear() + '-' + 
+                 String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                 String(now.getDate()).padStart(2, '0');
 
 const max = new Date();
 max.setDate(max.getDate() + 60);
 
 const dateInput = document.getElementById('date-picker');
-dateInput.min = todayStr;        // ← This now guarantees today is selectable
+dateInput.min = todayStr;
 dateInput.max = max.toISOString().slice(0, 10);
 
-// Optional: Auto-select today on load (nice UX)
-if (!dateInput.value) {
-  dateInput.value = todayStr;
-  // Trigger the availability load
-  const event = new Event('change');
-  dateInput.dispatchEvent(event);
-}
+// Force today selected
+dateInput.value = todayStr;
+
+// Trigger availability
+const event = new Event('change');
+dateInput.dispatchEvent(event);
 
       const partySel = document.getElementById('party_size');
       for (let i = 1; i <= 12; i++) {
