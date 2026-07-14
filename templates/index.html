@@ -279,26 +279,54 @@
     // ---------------------------------------------------------------------------
     // Init
     // ---------------------------------------------------------------------------
-    async function init() {
-      // show canceled banner if redirected back
-      if (new URLSearchParams(window.location.search).get('canceled') === '1') {
-        document.getElementById('canceled-banner').classList.remove('hidden');
-        // clean URL
-        window.history.replaceState({}, '', '/');
-      }
+ async function onDateChange(e) {
+  selectedDate = e.target.value;
+  selectedStart = null;
+  selectedDuration = null;
+  document.getElementById('duration-section').classList.add('hidden');
+  document.getElementById('btn-to-details').disabled = true;
 
-// SUPER AGGRESSIVE TEMP FIX — forces today
-const now = new Date();
-const todayStr = now.getFullYear() + '-' + 
-                 String(now.getMonth() + 1).padStart(2, '0') + '-' + 
-                 String(now.getDate()).padStart(2, '0');
+  if (!selectedDate) {
+    document.getElementById('slots-container').classList.add('hidden');
+    return;
+  }
 
-const max = new Date();
-max.setDate(max.getDate() + 60);
+  const d = new Date(selectedDate + 'T12:00:00');
+  const wd = d.getDay();
+  const isLate = (wd === 4 || wd === 5 || wd === 6);
+  document.getElementById('hours-hint').textContent =
+    isLate ? 'Open 4:00 PM – 2:00 AM · $40/hr' : 'Open 4:00 PM – 12:00 AM · $40/hr';
 
-const dateInput = document.getElementById('date-picker');
-dateInput.min = todayStr;
-dateInput.max = max.toISOString().slice(0, 10);
+  document.getElementById('slots-grid').innerHTML = '<p class="col-span-full text-center text-gray-500 text-sm py-6">Loading available times…</p>';
+  document.getElementById('slots-container').classList.remove('hidden');
+  document.getElementById('no-slots').classList.add('hidden');
+
+  try {
+    const res = await fetch(`/api/availability?date=${selectedDate}`);
+    const data = await res.json();
+
+    console.log("Availability response for", selectedDate, ":", data); // ← Helpful debug
+
+    if (data.error) {
+      console.error("Server error:", data.error);
+      document.getElementById('slots-grid').innerHTML = '';
+      document.getElementById('no-slots').textContent = 
+        data.error.includes("range") || data.error.includes("out") 
+          ? "No available slots today (past cutoff time?) — try a later start time or tomorrow." 
+          : data.error;
+      document.getElementById('no-slots').classList.remove('hidden');
+      document.getElementById('slot-count').textContent = '';
+      return;
+    }
+
+    availableSlots = data.slots || [];
+    if (data.price_per_hour_cents) pricePerHourCents = data.price_per_hour_cents;
+    renderSlots();
+  } catch (err) {
+    console.error(err);
+    document.getElementById('slots-grid').innerHTML = '<p class="col-span-full text-red-400 text-sm text-center">Could not load times. Please try again.</p>';
+  }
+}
 
 // Force today selected
 dateInput.value = todayStr;
