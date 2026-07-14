@@ -541,10 +541,10 @@ created = datetime.now().isoformat(timespec="seconds")
         """ ... your big INSERT query ... """
     )
 
-    db.commit()
+db.commit()
     booking_id = cur.lastrowid
 
-    # NEW: Send email notification
+    # Send email notification
     booking = db.execute("SELECT * FROM bookings WHERE id = ?", (booking_id,)).fetchone()
     send_booking_notification(dict(booking))
 
