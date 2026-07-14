@@ -379,8 +379,8 @@ def create_checkout_session():
         return jsonify({"error": f"Party size must be 1–{PARTY_SIZE_MAX}"}), 400
 
     today = date.today()
-    if d < today or d > today + timedelta(days=MAX_DAYS_AHEAD):
-        return jsonify({"error": "Date out of allowed range"}), 400
+  if d < today - timedelta(days=1) or d > today + timedelta(days=MAX_DAYS_AHEAD):
+    return jsonify({"error": "date out of range", "slots": []}), 400
 
     end_m = start_m + dur
     open_m, close_m = get_hours_for_date(d)
@@ -530,7 +530,7 @@ def booking_success():
     created = datetime.now().isoformat(timespec="seconds")
     payment_intent = checkout_session.payment_intent
     pi_id = payment_intent if isinstance(payment_intent, str) else getattr(payment_intent, "id", None)
-cur = db.execute(
+    cur = db.execute(
         """
         INSERT INTO bookings
         (booking_date, start_minutes, end_minutes, name, phone, email,
@@ -543,8 +543,8 @@ cur = db.execute(
             party, notes, amount_cents, session_id, pi_id, created,
         ),
     )
-db.commit()
-booking_id = cur.lastrowid
+    db.commit()
+    booking_id = cur.lastrowid
 
     # Send email notification
     booking = db.execute("SELECT * FROM bookings WHERE id = ?", (booking_id,)).fetchone()
@@ -558,6 +558,7 @@ booking_id = cur.lastrowid
         minutes_to_str=minutes_to_str,
         format_money=format_money,
     )
+    
 
 # Keep old /api/book for fallback / testing without Stripe (disabled if Stripe is live)
 @app.route("/api/book", methods=["POST"])
