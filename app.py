@@ -148,6 +148,9 @@ def send_booking_notification(booking):
     print("DEBUG: EMAIL_PASSWORD set?", bool(EMAIL_PASSWORD))
     print("📧 Attempting to send email for booking:", booking.get('id'), "to", NOTIFICATION_EMAIL)
     print("EMAIL_USER configured?", bool(EMAIL_USER))
+    print("DEBUG: EMAIL_HOST =", EMAIL_HOST)
+    print("DEBUG: EMAIL_PORT =", EMAIL_PORT)
+    print("DEBUG: EMAIL_USER length =", len(EMAIL_USER))
    
     """Send email alert when a new booking is made."""
     if not EMAIL_USER or not EMAIL_PASSWORD:
