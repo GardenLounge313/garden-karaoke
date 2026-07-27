@@ -144,17 +144,16 @@ def init_db():
 # Email Notification Helper
 # ---------------------------------------------------------------------------
 def send_booking_notification(booking):
-    print("DEBUG: EMAIL_USER =", EMAIL_USER)
-    print("DEBUG: EMAIL_PASSWORD set?", bool(EMAIL_PASSWORD))
-    print("📧 Attempting to send email for booking:", booking.get('id'), "to", NOTIFICATION_EMAIL)
-    print("EMAIL_USER configured?", bool(EMAIL_USER))
-    print("DEBUG: EMAIL_HOST =", EMAIL_HOST)
-    print("DEBUG: EMAIL_PORT =", EMAIL_PORT)
-    print("DEBUG: EMAIL_USER length =", len(EMAIL_USER))
-   
-    """Send email alert when a new booking is made."""
+    app.logger.info(f"DEBUG: EMAIL_USER = {EMAIL_USER}")
+    app.logger.info(f"DEBUG: EMAIL_PASSWORD set? {bool(EMAIL_PASSWORD)}")
+    app.logger.info(f"📧 Attempting to send email for booking: {booking.get('id')} to {NOTIFICATION_EMAIL}")
+    app.logger.info(f"EMAIL_USER configured? {bool(EMAIL_USER)}")
+    app.logger.info(f"DEBUG: EMAIL_HOST = {EMAIL_HOST}")
+    app.logger.info(f"DEBUG: EMAIL_PORT = {EMAIL_PORT}")
+    app.logger.info(f"DEBUG: EMAIL_USER length = {len(EMAIL_USER)}")
+
     if not EMAIL_USER or not EMAIL_PASSWORD:
-        print("⚠️ Email not configured - skipping notification")
+        app.logger.warning("⚠️ Email not configured - skipping notification")
         return False
    
     subject = f"🎤 New Karaoke Booking - {booking['name']} - {booking['booking_date']}"
@@ -474,9 +473,9 @@ def create_checkout_session():
 @app.route("/booking/success")
 def booking_success():
     """After Stripe payment, verify and create the booking."""
-    print("=== BOOKING SUCCESS ROUTE CALLED ===")  # ADD THIS LINE
-    print("Session ID received:", request.args.get("session_id"))
-    
+    app.logger.info("=== BOOKING SUCCESS ROUTE CALLED ===")
+    app.logger.info(f"Session ID received: {request.args.get('session_id')}")
+
     session_id = request.args.get("session_id")
     if not session_id:
         flash("Missing payment session.", "error")
@@ -492,6 +491,7 @@ def booking_success():
     if checkout_session.payment_status != "paid":
         flash("Payment was not completed.", "error")
         return redirect(url_for("index"))
+
     # Idempotency: already processed?
     db = get_db()
     existing = db.execute(
@@ -505,12 +505,14 @@ def booking_success():
             minutes_to_str=minutes_to_str,
             format_money=format_money,
         )
+
     meta = checkout_session.metadata or {}
     def safe_get(key, default=None):
         if isinstance(meta, dict):
             return meta.get(key, default)
         else:
             return getattr(meta, key, default) if hasattr(meta, key) else default
+
     try:
         booking_date = safe_get("booking_date")
         start_m = int(safe_get("start_minutes"))
@@ -524,6 +526,7 @@ def booking_success():
     except (KeyError, ValueError, TypeError):
         flash("Invalid booking data from payment. Please contact the bar.", "error")
         return redirect(url_for("index"))
+
     # Final availability check
     existing_slots = get_existing_bookings(db, booking_date)
     if has_overlap(start_m, end_m, existing_slots):
@@ -533,9 +536,11 @@ def booking_success():
             "error",
         )
         return redirect(url_for("index"))
+
     created = datetime.now().isoformat(timespec="seconds")
     payment_intent = checkout_session.payment_intent
     pi_id = payment_intent if isinstance(payment_intent, str) else getattr(payment_intent, "id", None)
+
     cur = db.execute(
         """
         INSERT INTO bookings
