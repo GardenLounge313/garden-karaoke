@@ -48,7 +48,7 @@ if STRIPE_AVAILABLE and STRIPE_SECRET_KEY:
 # Email Notifications Config
 # ---------------------------------------------------------------------------
 
-EMAIL_HOST = "smtp-mail.outlook.com"
+EMAIL_HOST = "smtp.office365.com"
 EMAIL_PORT = 587
 EMAIL_USER = os.environ.get("EMAIL_USER", "")           # ← Your full Outlook email
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")   # ← Your Outlook password or App Password
