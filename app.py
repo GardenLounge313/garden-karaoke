@@ -58,9 +58,20 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "bookings.db")
 # or better for Render:
 # DB_PATH = "/data/bookings.db"   # if you enable persistent disk
 
-# Pricing
-PRICE_PER_HOUR_CENTS = 4000          # $40.00 per hour
+# Pricing (cents per hour)
+PRICE_PER_HOUR_CENTS = 4000          # $40 base (Sun–Thu)
+PRICE_FRI_SAT_CENTS = 5000           # $50 Friday & Saturday
+PRICE_HOLIDAY_CENTS = 6000           # $60 Halloween, New Year's, Dec 11–12
 CURRENCY = "usd"
+
+# Fixed calendar dates billed at holiday rate (month, day) — any year
+HOLIDAY_MD = {
+    (10, 31),   # Halloween
+    (12, 31),   # New Year's Eve
+    (1, 1),     # New Year's Day
+    (12, 11),   # special rate
+    (12, 12),   # special rate
+}
 
 # Slot settings
 SLOT_INTERVAL_MINUTES = 30
@@ -278,10 +289,29 @@ def generate_available_slots(d: date, existing: list):
     
     return available
 
-def calc_amount_cents(duration_minutes: int) -> int:
-    """$40 per hour, pro-rated exactly (e.g. 90 min = $60)."""
+def get_price_per_hour_cents(d: date) -> int:
+    """Hourly rate for a booking date. Holiday dates override Fri/Sat."""
+    if (d.month, d.day) in HOLIDAY_MD:
+        return PRICE_HOLIDAY_CENTS
+    if d.weekday() in (4, 5):  # Friday, Saturday
+        return PRICE_FRI_SAT_CENTS
+    return PRICE_PER_HOUR_CENTS
+
+
+def price_label_for_date(d: date) -> str:
+    cents = get_price_per_hour_cents(d)
+    if cents == PRICE_HOLIDAY_CENTS:
+        return "holiday / special event"
+    if cents == PRICE_FRI_SAT_CENTS:
+        return "Friday / Saturday"
+    return "standard"
+
+
+def calc_amount_cents(duration_minutes: int, booking_date: date = None) -> int:
+    """Hourly rate pro-rated exactly (e.g. 90 min at $40 = $60)."""
+    rate = get_price_per_hour_cents(booking_date) if booking_date else PRICE_PER_HOUR_CENTS
     hours = duration_minutes / 60.0
-    return int(round(PRICE_PER_HOUR_CENTS * hours))
+    return int(round(rate * hours))
 
 def format_money(cents: int) -> str:
     return f"${cents / 100:.2f}"
@@ -306,6 +336,8 @@ def index():
         "index.html",
         stripe_publishable_key=STRIPE_PUBLISHABLE_KEY,
         price_per_hour=PRICE_PER_HOUR_CENTS // 100,
+        price_fri_sat=PRICE_FRI_SAT_CENTS // 100,
+        price_holiday=PRICE_HOLIDAY_CENTS // 100,
     )
 
 @app.route("/api/hours")
@@ -319,6 +351,8 @@ def api_hours():
         "party_max": PARTY_SIZE_MAX,
         "price_per_hour_cents": PRICE_PER_HOUR_CENTS,
         "price_per_hour": PRICE_PER_HOUR_CENTS // 100,
+        "price_fri_sat": PRICE_FRI_SAT_CENTS // 100,
+        "price_holiday": PRICE_HOLIDAY_CENTS // 100,
         "currency": CURRENCY,
         "stripe_enabled": bool(STRIPE_SECRET_KEY and STRIPE_AVAILABLE),
     })
@@ -344,13 +378,16 @@ def api_availability():
     existing = get_existing_bookings(db, date_str)
     slots = generate_available_slots(d, existing)
     open_m, close_m = get_hours_for_date(d)
+    rate_cents = get_price_per_hour_cents(d)
     return jsonify({
         "date": date_str,
         "open": minutes_to_str(open_m),
         "close": minutes_to_str(close_m),
         "existing_count": len(existing),
         "slots": slots,
-        "price_per_hour_cents": PRICE_PER_HOUR_CENTS,
+        "price_per_hour_cents": rate_cents,
+        "price_per_hour": rate_cents // 100,
+        "price_label": price_label_for_date(d),
     })
 
 @app.route("/api/create-checkout-session", methods=["POST"])
@@ -407,7 +444,7 @@ def create_checkout_session():
     #     current_m = now.hour * 60 + now.minute
     #     min_start = max(open_m, current_m)
 
-    amount_cents = calc_amount_cents(dur)
+    amount_cents = calc_amount_cents(dur, d)
     start_display = minutes_to_str(start_m)
     end_display = minutes_to_str(end_m)
     hours_label = f"{dur // 60}h" if dur % 60 == 0 else f"{dur // 60}h {dur % 60}m"
@@ -618,7 +655,7 @@ def api_book():
     if has_overlap(start_m, end_m, existing):
         return jsonify({"error": "Slot no longer available"}), 409
 
-    amount_cents = calc_amount_cents(dur)
+    amount_cents = calc_amount_cents(dur, d)
     created = datetime.now().isoformat(timespec="seconds")
     cur = db.execute(
         """
@@ -753,7 +790,7 @@ with app.app_context():
     print(f"""
 ╔══════════════════════════════════════════════════════════════════╗
 ║   The Garden Lounge – Karaoke Room Reservation System            ║
-║   Pricing: $40 / hour  ·  Stripe: {stripe_status:<30} ║
+║   Pricing: $40 / $50 Fri-Sat / $60 holidays  ·  Stripe: {stripe_status:<12} ║
 ║                                                                  ║
 ║   Public booking : http://0.0.0.0:{port}/                           ║
 ║   Admin panel    : http://0.0.0.0:{port}/admin                      ║
